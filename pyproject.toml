@@ -11,7 +11,7 @@ include = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.10"
+python = ">=3.11"
 numpy = "*"
 xarray = "*"
 
@@ -23,6 +23,10 @@ pytest = "*"
 scipy = "*"
 xarray = {version = "*",  extras = ["io"]}
 dask = "*"
+zensical = "*"
+hvplot = "*"
+jupyter-bokeh = "*"
+mkdocs-material = "*"
 
 [build-system]
 requires = ["poetry-core"]
