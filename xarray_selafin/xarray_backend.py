@@ -4,20 +4,26 @@ Documentation on how to implement a new backend in xarray
 * https://tutorial.xarray.dev/advanced/backends/2.Backend_with_Lazy_Loading.html
 """
 import os
+import threading
 from datetime import datetime
 from datetime import timedelta
-import numpy as np
 from operator import attrgetter
-import threading
-import xarray as xr
-from xarray.backends import BackendArray, BackendEntrypoint
-from xarray.core import indexing
 
-from xarray_selafin import Serafin
+import numpy as np
+import xarray as xr
+from serafin import Read
+from serafin import Serafin
+from serafin import serafin
+from serafin import SerafinHeader
+from serafin import Write
+from xarray.backends import BackendArray
+from xarray.backends import BackendEntrypoint
+from xarray.core import indexing
 
 
 try:
     import dask
+
     DASK_AVAILABLE = True
 except ImportError:
     DASK_AVAILABLE = False
@@ -40,7 +46,7 @@ def compute_duration_between_datetime(t0, time_serie):
 
 
 def read_serafin(filepath, lang):
-    resin = Serafin.Read(filepath, lang)
+    resin = Read(filepath, lang)
     resin.__enter__()
     resin.read_header()
     resin.get_time()
@@ -48,7 +54,6 @@ def read_serafin(filepath, lang):
 
 
 class SelafinLazyArray(BackendArray):
-
     def __init__(self, filename_or_obj, shape, dtype, lock, var):
         self.filename_or_obj = filename_or_obj
         self.shape = shape
@@ -134,7 +139,6 @@ class SelafinLazyArray(BackendArray):
 
 
 class SelafinBackendEntrypoint(BackendEntrypoint):
-
     def open_dataset(
         self,
         filename_or_obj,
@@ -144,7 +148,7 @@ class SelafinBackendEntrypoint(BackendEntrypoint):
         # Below are custom arguments
         disable_lock=False,
         lazy_loading=True,
-        lang=Serafin.LANG,
+        lang=serafin.LANG,
         # `chunks` and `cache` DO NOT go here, they are handled by xarray
     ):
         # Initialize SELAFIN reader
@@ -218,7 +222,7 @@ class SelafinBackendEntrypoint(BackendEntrypoint):
 
         ds.set_close(close)
 
-        ds.attrs["title"] = slf.header.title.decode(Serafin.SLF_EIT).strip()
+        ds.attrs["title"] = slf.header.title.decode(serafin.SLF_EIT).strip()
         ds.attrs["language"] = slf.header.language
         ds.attrs["float_size"] = slf.header.float_size
         ds.attrs["endian"] = slf.header.endian
@@ -228,7 +232,7 @@ class SelafinBackendEntrypoint(BackendEntrypoint):
         if not is_2d:
             ds.attrs["ikle3"] = np.reshape(slf.header.ikle, (slf.header.nb_elements, ndp3))
         ds.attrs["variables"] = {
-            var_ID: (name.decode(Serafin.SLF_EIT).rstrip(), unit.decode(Serafin.SLF_EIT).rstrip())
+            var_ID: (name.decode(serafin.SLF_EIT).rstrip(), unit.decode(serafin.SLF_EIT).rstrip())
             for var_ID, name, unit in slf.header.iter_on_all_variables()
         }
         ds.attrs["date_start"] = slf.header.date
@@ -249,7 +253,6 @@ class SelafinBackendEntrypoint(BackendEntrypoint):
 
 @xr.register_dataset_accessor("selafin")
 class SelafinAccessor:
-
     def __init__(self, xarray_obj):
         self._ds = xarray_obj
         self._header = None
@@ -279,7 +282,7 @@ class SelafinAccessor:
 
         # Title
         title = ds.attrs.get("title", "Converted with array-serafin")
-        header = Serafin.SerafinHeader(title)
+        header = SerafinHeader(title)
 
         # File precision
         float_size = ds.attrs.get("float_size", 4)  # Default: single precision
@@ -311,7 +314,7 @@ class SelafinAccessor:
                 header.date = DEFAULT_DATE_START
 
         # Variables
-        header.language = ds.attrs.get("language", Serafin.LANG)
+        header.language = ds.attrs.get("language", serafin.LANG)
         for var in ds.data_vars:
             try:
                 name, unit = ds.attrs["variables"][var]
@@ -376,7 +379,7 @@ class SelafinAccessor:
         """Writes header and all data frames into output file"""
         header = self._header
 
-        with Serafin.Write(filepath, header.language, overwrite=True) as resout:
+        with Write(filepath, header.language, overwrite=True) as resout:
             resout.write_header(header)
 
             t0 = np.datetime64(datetime(*header.date))

@@ -44,6 +44,7 @@ repos:
     rev: "23.11.0"
     hooks:
       - id: "black"
+        args: [--line-length, "127"]
 
   - repo: "https://github.com/astral-sh/ruff-pre-commit"
     # Ruff version.
