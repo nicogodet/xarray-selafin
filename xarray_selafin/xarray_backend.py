@@ -3,24 +3,18 @@ Documentation on how to implement a new backend in xarray
 * https://docs.xarray.dev/en/latest/internals/how-to-add-new-backend.html
 * https://tutorial.xarray.dev/advanced/backends/2.Backend_with_Lazy_Loading.html
 """
+
 import os
 import threading
-from datetime import datetime
-from datetime import timedelta
+from datetime import datetime, timedelta
 from operator import attrgetter
 
 import numpy as np
 import xarray as xr
-from serafin import Read
-from serafin import SerafinHeader
-from serafin import SerafinRequestError
-from serafin import Write
-from serafin.serafin import LANG
-from serafin.serafin import SLF_EIT
-from xarray.backends import BackendArray
-from xarray.backends import BackendEntrypoint
+from serafin import SerafinHeader, SerafinReader, SerafinRequestError, SerafinWriter
+from serafin.serafin import LANG, SLF_EIT
+from xarray.backends import BackendArray, BackendEntrypoint
 from xarray.core import indexing
-
 
 try:
     import dask
@@ -47,7 +41,7 @@ def compute_duration_between_datetime(t0, time_serie):
 
 
 def read_serafin(filepath, lang):
-    resin = Read(filepath, lang)
+    resin = SerafinReader(filepath, lang)
     resin.__enter__()
     resin.read_header()
     resin.get_time()
@@ -105,10 +99,14 @@ class SelafinLazyArray(BackendArray):
         res_array = np.empty(ds_shape, dtype=self.dtype)
 
         for ds_index_time, time_index in enumerate(time_range):
-            flatten_values = self.filename_or_obj.read_var_in_frame(time_index, self.var)  # flatten np.ndarray
+            flatten_values = self.filename_or_obj.read_var_in_frame(
+                time_index, self.var
+            )  # flatten np.ndarray
             if ndim == 3:
                 all_values = flatten_values.reshape((nb_planes, nb_nodes_2d))
-                if plan_range == slice(None, None, None) and node_key == slice(None, None, None):  # avoid a subset to speedup
+                if plan_range == slice(None, None, None) and node_key == slice(
+                    None, None, None
+                ):  # avoid a subset to speedup
                     res_array[ds_index_time, :, :] = all_values
                 else:
                     res_array[ds_index_time, :, :] = all_values[np.ix_(plan_range, node_range)]
@@ -165,7 +163,7 @@ class SelafinBackendEntrypoint(BackendEntrypoint):
         nplan = slf.header.nb_planes
         x = slf.header.x
         y = slf.header.y
-        vars = slf.header.var_IDs
+        vars = slf.header.var_ids
 
         # Create data variables
         data_vars = {}
@@ -322,10 +320,10 @@ class SelafinAccessor:
                 header.add_variable_str(var, name, unit)
             except KeyError:
                 try:
-                    header.add_variable_from_ID(var)
+                    header.add_variable_from_id(var)
                 except SerafinRequestError:
                     header.add_variable_str(var, var, "?")
-        header.nb_var = len(header.var_IDs)
+        header.nb_var = len(header.var_ids)
 
         if "plan" in ds.dims:  # 3D
             header.is_2d = False
@@ -380,7 +378,7 @@ class SelafinAccessor:
         """Writes header and all data frames into output file"""
         header = self._header
 
-        with Write(filepath, header.language, overwrite=True) as resout:
+        with SerafinWriter(filepath, header.language, overwrite=True) as resout:
             resout.write_header(header)
 
             t0 = np.datetime64(datetime(*header.date))
@@ -395,7 +393,7 @@ class SelafinAccessor:
             shape = (header.nb_var, header.nb_nodes)
             values = np.empty(shape, dtype=header.np_float_type)
             for time_index, time in enumerate(time_serie):
-                for var_index, var in enumerate(header.var_IDs):
+                for var_index, var in enumerate(header.var_ids):
                     if header.nb_frames in (0, 1):
                         array = self._ds[var].values
                     else:
