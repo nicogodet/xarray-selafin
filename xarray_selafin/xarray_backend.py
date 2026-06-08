@@ -3,17 +3,22 @@ Documentation on how to implement a new backend in xarray
 * https://docs.xarray.dev/en/latest/internals/how-to-add-new-backend.html
 * https://tutorial.xarray.dev/advanced/backends/2.Backend_with_Lazy_Loading.html
 """
-
 import os
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime
+from datetime import timedelta
 from operator import attrgetter
 
 import numpy as np
 import xarray as xr
-from serafin import SerafinHeader, SerafinReader, SerafinRequestError, SerafinWriter
-from serafin.serafin import LANG, SLF_EIT
-from xarray.backends import BackendArray, BackendEntrypoint
+from serafin import SerafinHeader
+from serafin import SerafinReader
+from serafin import SerafinRequestError
+from serafin import SerafinWriter
+from serafin.serafin import LANG
+from serafin.serafin import SLF_EIT
+from xarray.backends import BackendArray
+from xarray.backends import BackendEntrypoint
 from xarray.core import indexing
 
 try:
@@ -99,14 +104,10 @@ class SelafinLazyArray(BackendArray):
         res_array = np.empty(ds_shape, dtype=self.dtype)
 
         for ds_index_time, time_index in enumerate(time_range):
-            flatten_values = self.filename_or_obj.read_var_in_frame(
-                time_index, self.var
-            )  # flatten np.ndarray
+            flatten_values = self.filename_or_obj.read_var_in_frame(time_index, self.var)  # flatten np.ndarray
             if ndim == 3:
                 all_values = flatten_values.reshape((nb_planes, nb_nodes_2d))
-                if plan_range == slice(None, None, None) and node_key == slice(
-                    None, None, None
-                ):  # avoid a subset to speedup
+                if plan_range == slice(None, None, None) and node_key == slice(None, None, None):  # avoid a subset to speedup
                     res_array[ds_index_time, :, :] = all_values
                 else:
                     res_array[ds_index_time, :, :] = all_values[np.ix_(plan_range, node_range)]
